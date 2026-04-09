@@ -18,7 +18,7 @@ export default defineConfig({
         changeOrigin: true
       },
       "/console": {
-        target: "http://127.0.0.1:8818",
+        target: "http://127.0.0.1:8812",
         changeOrigin: true
       },
       "/workload": {

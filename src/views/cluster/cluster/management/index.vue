@@ -63,6 +63,15 @@
           <header class="panel-head">
             <h2>{{ currentTabMeta.panelTitle }}</h2>
             <div class="panel-actions">
+              <button
+                v-if="activeTab === 'resources'"
+                type="button"
+                class="ghost-btn"
+                :disabled="monitorLoading || !clusterDetail?.uuid"
+                @click="refreshMonitorData"
+              >
+                {{ monitorLoading ? "刷新中..." : "刷新监控" }}
+              </button>
               <button type="button" class="ghost-btn" :disabled="saving" @click="cancelCurrentTab">取消</button>
               <button type="button" class="primary-btn" :disabled="saving" @click="saveCurrentTab">
                 {{ saving ? "保存中..." : "保存" }}
@@ -99,6 +108,9 @@
             v-else-if="activeTab === 'resources'"
             :cluster-detail="clusterDetail"
             :nodes="nodes"
+            :overview-metrics="overviewMetrics"
+            :resource-metrics="resourceMetrics"
+            :monitor-loading="monitorLoading"
           />
 
           <OperationLog
@@ -118,6 +130,13 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import {
+  getClusterOverviewApi,
+  getClusterResourcesApi,
+  listNodesMetricsApi,
+  type ClusterOverviewMetrics,
+  type ClusterResourcesMetrics
+} from "../../../../api/console/monitor";
 import { getClusterDetailApi, syncClusterApi, type Cluster } from "../../../../api/manager/cluster";
 import { getNodeListApi, type ClusterNodeInfo } from "../../../../api/manager/node";
 import BasicInfo, { type BasicInfoForm } from "./tabs/BasicInfo.vue";
@@ -152,9 +171,12 @@ const syncLoading = ref(false);
 const saving = ref(false);
 const noticeMsg = ref("");
 const errorMsg = ref("");
+const monitorLoading = ref(false);
 
 const clusterDetail = ref<Cluster | null>(null);
 const nodes = ref<ClusterNodeInfo[]>([]);
+const overviewMetrics = ref<ClusterOverviewMetrics | null>(null);
+const resourceMetrics = ref<ClusterResourcesMetrics | null>(null);
 const operationLogs = ref<OperationLogItem[]>([]);
 
 const basicForm = ref<BasicInfoForm>({
@@ -255,6 +277,10 @@ async function fetchClusterDetail(): Promise<void> {
     });
     nodes.value = nodeRes.items ?? [];
     appendLog("读取集群详情", "成功", `节点数量=${nodes.value.length}`);
+
+    if (activeTab.value === "resources") {
+      await fetchMonitorMetrics(detail.uuid, true);
+    }
   } catch (error) {
     clusterDetail.value = null;
     nodes.value = [];
@@ -263,6 +289,41 @@ async function fetchClusterDetail(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+async function fetchMonitorMetrics(clusterUuid: string, silent: boolean): Promise<void> {
+  if (!clusterUuid) return;
+  monitorLoading.value = true;
+  if (!silent) {
+    noticeMsg.value = "";
+    errorMsg.value = "";
+  }
+  try {
+    const [overviewRes, resourceRes, nodeRes] = await Promise.all([
+      getClusterOverviewApi({ clusterUuid }),
+      getClusterResourcesApi({ clusterUuid }),
+      listNodesMetricsApi({ clusterUuid })
+    ]);
+    overviewMetrics.value = overviewRes;
+    resourceMetrics.value = resourceRes;
+    appendLog("刷新监控", "成功", `概览就绪，节点监控数=${nodeRes.total}`);
+    if (!silent) {
+      noticeMsg.value = "监控数据已刷新";
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "刷新监控失败";
+    appendLog("刷新监控", "失败", message);
+    if (!silent) {
+      errorMsg.value = message;
+    }
+  } finally {
+    monitorLoading.value = false;
+  }
+}
+
+async function refreshMonitorData(): Promise<void> {
+  if (!clusterDetail.value?.uuid) return;
+  await fetchMonitorMetrics(clusterDetail.value.uuid, false);
 }
 
 async function syncCurrentCluster(): Promise<void> {
@@ -274,6 +335,9 @@ async function syncCurrentCluster(): Promise<void> {
     const res = await syncClusterApi(clusterDetail.value.id);
     appendLog("同步集群", "成功", `source=${res.source}, nodes=${res.nodeCount}`);
     await fetchClusterDetail();
+    if (clusterDetail.value?.uuid && activeTab.value === "resources") {
+      await fetchMonitorMetrics(clusterDetail.value.uuid, true);
+    }
     noticeMsg.value = "同步成功，已刷新集群信息";
   } catch (error) {
     errorMsg.value = error instanceof Error ? error.message : "同步失败";
@@ -325,6 +389,8 @@ watch(
   async (id) => {
     activeTab.value = "basic";
     operationLogs.value = [];
+    overviewMetrics.value = null;
+    resourceMetrics.value = null;
     if (!id || id <= 0) {
       clusterDetail.value = null;
       nodes.value = [];
@@ -333,6 +399,16 @@ watch(
     await fetchClusterDetail();
   },
   { immediate: true }
+);
+
+watch(
+  activeTab,
+  async (tab) => {
+    if (tab !== "resources") return;
+    if (!clusterDetail.value?.uuid) return;
+    if (resourceMetrics.value || monitorLoading.value) return;
+    await fetchMonitorMetrics(clusterDetail.value.uuid, true);
+  }
 );
 </script>
 

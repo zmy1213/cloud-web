@@ -223,6 +223,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, nextTick } from "vue";
+import { listNodesMetricsApi, type NodeMetricItem } from "../../../api/console/monitor";
 import { searchClusterApi, type Cluster } from "../../../api/manager/cluster";
 import {
   getNodeDetailApi,
@@ -321,20 +322,79 @@ async function loadNodes(): Promise<void> {
   loadingNodes.value = true;
   errorMsg.value = "";
   try {
-    const res = await getNodeListApi({
-      clusterUuid: selectedClusterUuid.value,
-      page: 1,
-      pageSize: 50,
-      orderField: "id",
-      isAsc: false
-    });
-    nodes.value = res.items ?? [];
-    total.value = res.total ?? nodes.value.length;
+    const [res, metricsRes] = await Promise.all([
+      getNodeListApi({
+        clusterUuid: selectedClusterUuid.value,
+        page: 1,
+        pageSize: 50,
+        orderField: "id",
+        isAsc: false
+      }),
+      listNodesMetricsApi({ clusterUuid: selectedClusterUuid.value }).catch(() => null)
+    ]);
+
+    const baseNodes = res.items ?? [];
+    total.value = res.total ?? baseNodes.length;
+
+    if (!metricsRes || !Array.isArray(metricsRes.items) || metricsRes.items.length === 0) {
+      nodes.value = baseNodes;
+      return;
+    }
+
+    nodes.value = mergeRealtimeMetrics(baseNodes, metricsRes.items);
   } catch (error) {
     errorMsg.value = error instanceof Error ? error.message : "加载节点失败";
   } finally {
     loadingNodes.value = false;
   }
+}
+
+function mergeRealtimeMetrics(baseNodes: ClusterNodeInfo[], metricItems: NodeMetricItem[]): ClusterNodeInfo[] {
+  const byNodeName = new Map<string, NodeMetricItem>();
+  const byIP = new Map<string, NodeMetricItem>();
+  const byInstanceHost = new Map<string, NodeMetricItem>();
+
+  for (const item of metricItems) {
+    const nodeName = item.nodeName?.trim().toLowerCase();
+    if (nodeName) byNodeName.set(nodeName, item);
+
+    const ip = item.internalIp?.trim();
+    if (ip) byIP.set(ip, item);
+
+    const instanceHost = extractHost(item.instance);
+    if (instanceHost) byInstanceHost.set(instanceHost, item);
+  }
+
+  return baseNodes.map((node) => {
+    const nodeNameKey = node.nodeName?.trim().toLowerCase();
+    const ipKey = node.nodeIp?.trim();
+    const metric =
+      (nodeNameKey ? byNodeName.get(nodeNameKey) : undefined) ||
+      (ipKey ? byIP.get(ipKey) : undefined) ||
+      (ipKey ? byInstanceHost.get(ipKey) : undefined);
+
+    if (!metric) return node;
+
+    return {
+      ...node,
+      cpuUsge: normalizePercent(metric.cpuUsage, node.cpuUsge),
+      memoryUsge: normalizePercent(metric.memoryUsage, node.memoryUsge),
+      nodeStatus: metric.ready ? "Ready" : "NotReady",
+      nodeIp: node.nodeIp || metric.internalIp || node.nodeIp
+    };
+  });
+}
+
+function extractHost(instance: string): string {
+  const raw = instance?.trim();
+  if (!raw) return "";
+  const [host] = raw.split(":");
+  return host?.trim() || "";
+}
+
+function normalizePercent(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(100, value));
 }
 
 async function openDetail(nodeID: number): Promise<void> {
@@ -554,7 +614,6 @@ onMounted(async () => {
 .m-val.blue { color: var(--c-blue); }
 .m-val.pod-count { color: var(--c-text-sub); font-weight: 400;}
 .m-val.pod-count strong { color: var(--c-text-main); font-weight: 600;}
-
 .m-bar-track { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; width: 100%;}
 .m-bar-track i { display: block; height: 100%; border-radius: 3px; }
 .m-bar-track i.red { background: var(--c-red); }

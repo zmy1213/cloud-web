@@ -19,6 +19,21 @@ const router = createRouter({
       component: () => import("../views/index/index.vue")
     },
     {
+      path: "/project/management",
+      name: "ProjectManagement",
+      component: () => import("../views/index/index.vue")
+    },
+    {
+      path: "/project/resource",
+      name: "ProjectResource",
+      component: () => import("../views/index/index.vue")
+    },
+    {
+      path: "/project/workspace",
+      name: "ProjectWorkspace",
+      component: () => import("../views/index/index.vue")
+    },
+    {
       path: "/:pathMatch(.*)*",
       redirect: HOME_PATH
     }

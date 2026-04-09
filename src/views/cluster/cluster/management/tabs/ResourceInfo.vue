@@ -1,5 +1,6 @@
 <template>
   <div class="panel-body">
+    <div v-if="monitorLoading" class="monitor-hint">监控数据刷新中...</div>
     <div class="resource-metrics">
       <div v-for="metric in metrics" :key="metric.label" class="metric-row">
         <div class="metric-header">
@@ -15,7 +16,7 @@
     <div class="resource-summary">
       <div class="summary-item">
         <span>节点总数</span>
-        <strong>{{ nodes.length }}</strong>
+        <strong>{{ nodeTotal }}</strong>
       </div>
       <div class="summary-item">
         <span>Ready 节点</span>
@@ -31,23 +32,50 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import type { ClusterOverviewMetrics, ClusterResourcesMetrics } from "../../../../../api/console/monitor";
 import type { Cluster } from "../../../../../api/manager/cluster";
 import type { ClusterNodeInfo } from "../../../../../api/manager/node";
 
 const props = defineProps<{
   clusterDetail: Cluster | null;
   nodes: ClusterNodeInfo[];
+  overviewMetrics?: ClusterOverviewMetrics | null;
+  resourceMetrics?: ClusterResourcesMetrics | null;
+  monitorLoading?: boolean;
 }>();
 
 const readyNodeCount = computed(() => {
+  if (props.overviewMetrics) {
+    return Math.max(0, props.overviewMetrics.nodeReady);
+  }
   return props.nodes.filter((item) => item.nodeStatus.toLowerCase() === "ready").length;
 });
 
 const notReadyNodeCount = computed(() => {
+  if (props.overviewMetrics) {
+    return Math.max(0, props.overviewMetrics.nodeTotal - props.overviewMetrics.nodeReady);
+  }
   return Math.max(0, props.nodes.length - readyNodeCount.value);
 });
 
+const nodeTotal = computed(() => {
+  if (props.overviewMetrics) {
+    return Math.max(0, props.overviewMetrics.nodeTotal);
+  }
+  return props.nodes.length;
+});
+
 const metrics = computed(() => {
+  const monitorResource = props.resourceMetrics;
+  if (monitorResource) {
+    return [
+      metric("CPU 使用率", monitorResource.cpu.usagePercent),
+      metric("内存使用率", monitorResource.memory.usagePercent),
+      metric("Pod 使用率", monitorResource.pods.usagePercent),
+      metric("存储使用率", props.clusterDetail?.storageUsage ?? 0)
+    ];
+  }
+
   const detail = props.clusterDetail;
   if (!detail) return [];
   return [
@@ -73,6 +101,15 @@ function percent(value: number): string {
 
 <style scoped>
 .panel-body { padding: 18px; }
+.monitor-hint {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f8ff;
+  color: #4b6290;
+  border: 1px solid #d6e1f5;
+  font-size: 12px;
+}
 .resource-metrics { display: grid; gap: 12px; }
 .metric-row { display: flex; flex-direction: column; gap: 8px; }
 .metric-header { display: flex; justify-content: space-between; font-size: 14px; }

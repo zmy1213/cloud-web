@@ -114,6 +114,9 @@
         />
         <NodeListPage v-else-if="showNodeListPage" />
         <DeviceCenterPage v-else-if="showDeviceCenterPage" />
+        <ProjectManagementPage v-else-if="showProjectManagementPage" />
+        <ProjectResourcePage v-else-if="showProjectResourcePage" />
+        <ProjectWorkspacePage v-else-if="showProjectWorkspacePage" />
         
         <template v-else>
           <section class="hero-center-stage">
@@ -155,7 +158,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 // 组件引入保持不变
 import Banner from "./modules/banner.vue";
 import AnnualSales from "./modules/annual-sales.vue";
@@ -174,8 +178,12 @@ import ClusterListPage from "../../cluster/cluster/index.vue";
 import ClusterManagementPage from "../../cluster/cluster/management/index.vue";
 import NodeListPage from "../../cluster/node/index.vue";
 import DeviceCenterPage from "../../device/center/index.vue";
+import ProjectManagementPage from "../../project/management/index.vue";
+import ProjectResourcePage from "../../project/resource/index.vue";
+import ProjectWorkspacePage from "../../project/workspace/index.vue";
 import { getDashboardOverviewApi } from "../../../api/portal/dashboard";
 import { getClusterDetailApi, searchClusterApi } from "../../../api/manager/cluster";
+import { HOME_PATH } from "../../../router/paths";
 import type { DashboardOverviewResponse } from "../../../types/dashboard";
 import type { Cluster } from "../../../api/manager/cluster";
 
@@ -187,6 +195,8 @@ interface MenuGroup {
 }
 
 const emit = defineEmits<{ logout: [] }>();
+const route = useRoute();
+const router = useRouter();
 
 const dashboard = ref<DashboardOverviewResponse | null>(null);
 const clusters = ref<Cluster[]>([]);
@@ -243,7 +253,7 @@ const menuItems = ref<MenuGroup[]>([
     children: ["登录日志", "日志审计", "账单中心"] 
   },
   { 
-    label: "智能运维", 
+    label: "异常检测", 
     iconBg: "#f6c489", // 桃色
     svgIcon: `<svg viewBox="0 0 24 24" fill="none" stroke="#522a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`,
     children: ["算电概览", "算力异常检测"] 
@@ -275,12 +285,22 @@ const showClusterManagementPage = computed(
 );
 const showNodeListPage = computed(() => activeMenu.value === "集群管理" && activeSubMenu.value === "节点管理");
 const showDeviceCenterPage = computed(() => activeMenu.value === "设备中心");
+const showProjectManagementPage = computed(
+  () => activeMenu.value === "项目中心" && activeSubMenu.value === "项目管理"
+);
+const showProjectResourcePage = computed(
+  () => activeMenu.value === "项目中心" && activeSubMenu.value === "资源池"
+);
+const showProjectWorkspacePage = computed(
+  () => activeMenu.value === "项目中心" && activeSubMenu.value === "工作空间"
+);
 
 const activeTab = computed({
   get() { return activeSubMenu.value; },
   set(value: string) {
     activeSubMenu.value = value;
     inClusterManagement.value = false;
+    navigateByMenu(activeMenu.value, value);
   }
 });
 
@@ -300,6 +320,7 @@ function toggleMenu(menuLabel: string): void {
     const firstSubMenu = menuItems.value.find((item) => item.label === menuLabel)?.children[0];
     activeSubMenu.value = firstSubMenu ?? "";
     expandedMenus.value[menuLabel] = true;
+    navigateByMenu(menuLabel, activeSubMenu.value);
   }
 }
 
@@ -309,6 +330,51 @@ function selectSubMenu(menuLabel: string, subMenuLabel: string): void {
   expandedMenus.value = { [menuLabel]: true };
   inClusterManagement.value = false;
   consoleClusterId.value = null;
+  navigateByMenu(menuLabel, subMenuLabel);
+}
+
+function navigateByMenu(menuLabel: string, subMenuLabel: string): void {
+  if (menuLabel === "项目中心" && subMenuLabel === "项目管理") {
+    if (route.path !== "/project/management") {
+      void router.push("/project/management");
+    }
+    return;
+  }
+  if (menuLabel === "项目中心" && subMenuLabel === "资源池") {
+    if (route.path !== "/project/resource") {
+      void router.push("/project/resource");
+    }
+    return;
+  }
+  if (menuLabel === "项目中心" && subMenuLabel === "工作空间") {
+    if (route.path !== "/project/workspace") {
+      void router.push("/project/workspace");
+    }
+    return;
+  }
+
+  if (
+    route.path === "/project/management" ||
+    route.path === "/project/resource" ||
+    route.path === "/project/workspace"
+  ) {
+    void router.push(HOME_PATH);
+  }
+}
+
+function syncMenuByRoute(path: string): void {
+  if (path !== "/project/management" && path !== "/project/resource" && path !== "/project/workspace") return;
+  inClusterManagement.value = false;
+  consoleClusterId.value = null;
+  activeMenu.value = "项目中心";
+  if (path === "/project/resource") {
+    activeSubMenu.value = "资源池";
+  } else if (path === "/project/workspace") {
+    activeSubMenu.value = "工作空间";
+  } else {
+    activeSubMenu.value = "项目管理";
+  }
+  expandedMenus.value = { "项目中心": true };
 }
 
 function openClusterConsole(clusterId: number): void {
@@ -346,6 +412,7 @@ function handleUserMenuClickOutside(event: MouseEvent): void {
 
 onMounted(async () => {
   document.addEventListener("click", handleUserMenuClickOutside);
+  syncMenuByRoute(route.path);
   const userInfoRaw = localStorage.getItem("userInfo");
   const username = userInfoRaw ? (JSON.parse(userInfoRaw).username as string | undefined) : undefined;
   try {
@@ -359,6 +426,13 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleUserMenuClickOutside);
 });
+
+watch(
+  () => route.path,
+  (newPath) => {
+    syncMenuByRoute(newPath);
+  }
+);
 
 async function loadClusters(): Promise<void> {
   const response = await searchClusterApi();
