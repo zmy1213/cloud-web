@@ -230,7 +230,7 @@ import {
   type UserSearchRequest,
   type UserSysUser
 } from "../../../api/portal/user";
-import { searchRoleApi, type RoleSysRole } from "../../../api/portal/role";
+import { getRoleByIdApi, searchRoleApi, type RoleSysRole } from "../../../api/portal/role";
 import {
   bindUserPlatformApi,
   getPlatformUsersApi,
@@ -433,6 +433,17 @@ function sameNumberSet(left: number[], right: number[]): boolean {
   return l.every((item, index) => item === r[index]);
 }
 
+function mergeRoleOptions(base: RoleSysRole[], extras: RoleSysRole[]): RoleSysRole[] {
+  const map = new Map<number, RoleSysRole>();
+  [...base, ...extras].forEach((item) => {
+    if (!item || !Number.isFinite(item.id) || item.id <= 0) {
+      return;
+    }
+    map.set(item.id, item);
+  });
+  return Array.from(map.values()).sort((a, b) => a.id - b.id);
+}
+
 async function loadCurrentUser() {
   try {
     const user = await getUserInfoApi();
@@ -452,6 +463,9 @@ async function loadData() {
       pageSize: pagination.pageSize,
       ...toUserSearchParams(searchForm.value)
     };
+    if (currentUsername.value && currentUsername.value !== "super_admin") {
+      params.createBy = currentUsername.value;
+    }
 
     const response = await searchUserApi(params);
     users.value = response.items;
@@ -718,12 +732,35 @@ async function openRoleDialog(user: UserSysUser): Promise<void> {
   roleDialog.selectedRoleIds = [];
 
   try {
-    const [roleResponse, userRoles] = await Promise.all([
-      searchRoleApi({ page: 1, pageSize: 200 }),
-      getUserRolesApi(user.id)
-    ]);
-    roleDialog.roleOptions = roleResponse.items;
-    roleDialog.selectedRoleIds = uniquePositiveNumbers(userRoles.roleIds || []);
+    const isSuperAdmin = currentUsername.value === "super_admin";
+    const searchRequest =
+      isSuperAdmin
+        ? { page: 1, pageSize: 500 }
+        : {
+            page: 1,
+            pageSize: 500,
+            createBy: currentUsername.value || "__no_creator__"
+          };
+
+    const [roleResponse, userRoles] = await Promise.all([searchRoleApi(searchRequest), getUserRolesApi(user.id)]);
+    const selectedRoleIds = uniquePositiveNumbers(userRoles.roleIds || []);
+    const ownCreatedRoles = roleResponse.items || [];
+    const assignedRolesInList = ownCreatedRoles.filter((item) => selectedRoleIds.includes(item.id));
+
+    const mergedRoleOptions = mergeRoleOptions(ownCreatedRoles, assignedRolesInList);
+    const missingAssignedIds = selectedRoleIds.filter((id) => !mergedRoleOptions.some((item) => item.id === id));
+
+    if (missingAssignedIds.length > 0) {
+      const missingRoleResponses = await Promise.allSettled(missingAssignedIds.map((id) => getRoleByIdApi(id)));
+      const missingRoles = missingRoleResponses
+        .filter((result): result is PromiseFulfilledResult<RoleSysRole> => result.status === "fulfilled")
+        .map((result) => result.value);
+      roleDialog.roleOptions = mergeRoleOptions(mergedRoleOptions, missingRoles);
+    } else {
+      roleDialog.roleOptions = mergedRoleOptions;
+    }
+
+    roleDialog.selectedRoleIds = selectedRoleIds;
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "加载角色信息失败";
   } finally {

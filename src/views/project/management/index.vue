@@ -258,7 +258,7 @@ import {
   type Project,
   updateProjectApi
 } from "../../../api/manager/project";
-import { getUserByIdApi, searchUserApi, type UserSysUser } from "../../../api/portal/user";
+import { getUserByIdApi, getUserInfoApi, searchUserApi, type UserSysUser } from "../../../api/portal/user";
 
 const loading = ref(false);
 const errorMsg = ref("");
@@ -269,6 +269,7 @@ const deletingMap = ref<Record<number, boolean>>({});
 const syncLoadingMap = ref<Record<number, boolean>>({});
 const syncAllLoading = ref(false);
 let successTimer = 0;
+const currentUsername = ref("");
 
 const pagination = reactive({
   page: 1,
@@ -380,6 +381,29 @@ function showSuccess(message: string): void {
 
 function uniquePositiveNumbers(values: number[]): number[] {
   return Array.from(new Set(values.filter((item) => Number.isInteger(item) && item > 0)));
+}
+
+function readUsernameFromStorage(): string {
+  const raw = localStorage.getItem("userInfo");
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { username?: string };
+    return (parsed.username || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function loadCurrentUsername(): Promise<void> {
+  try {
+    const user = await getUserInfoApi();
+    currentUsername.value = (user.username || "").trim();
+  } catch {
+    currentUsername.value = readUsernameFromStorage();
+  }
 }
 
 async function loadData() {
@@ -589,16 +613,39 @@ async function loadCurrentProjectAdmins(projectId: number): Promise<void> {
 
 async function loadMemberUsers(): Promise<void> {
   const keyword = memberDialog.keyword.trim();
+  const owner = currentUsername.value || readUsernameFromStorage();
   const response = await searchUserApi({
     page: memberDialog.page,
     pageSize: memberDialog.pageSize,
     username: keyword || undefined,
     nickname: keyword || undefined,
-    email: keyword || undefined
+    email: keyword || undefined,
+    createBy: owner || undefined
   });
 
-  memberDialog.userOptions = response.items;
-  memberDialog.total = response.total;
+  const normalizedKeyword = keyword.toLowerCase();
+  const matchKeyword = (user: UserSysUser): boolean => {
+    if (!normalizedKeyword) {
+      return true;
+    }
+    return [user.username, user.nickname, user.email].some((field) => field.toLowerCase().includes(normalizedKeyword));
+  };
+
+  // 规则：可选用户 = 自己创建的用户 + 当前项目已分配成员
+  const optionsMap = new Map<number, UserSysUser>();
+  response.items.forEach((user) => {
+    optionsMap.set(user.id, user);
+  });
+  Object.values(memberDialog.selectedUserMap).forEach((user) => {
+    if (user && user.id > 0 && matchKeyword(user)) {
+      optionsMap.set(user.id, user);
+    }
+  });
+
+  const options = Array.from(optionsMap.values());
+
+  memberDialog.userOptions = options;
+  memberDialog.total = options.length > response.total ? options.length : response.total;
   memberDialog.userOptions.forEach((item) => {
     memberDialog.selectedUserMap[item.id] = item;
   });
@@ -618,7 +665,8 @@ async function openMemberDialog(item: Project): Promise<void> {
   errorMsg.value = "";
 
   try {
-    await Promise.all([loadCurrentProjectAdmins(item.id), loadMemberUsers()]);
+    await loadCurrentProjectAdmins(item.id);
+    await loadMemberUsers();
   } catch (error) {
     errorMsg.value = error instanceof Error ? error.message : "加载项目成员失败";
   } finally {
@@ -771,6 +819,7 @@ async function submitMemberDialog(): Promise<void> {
 }
 
 onMounted(() => {
+  void loadCurrentUsername();
   void loadData();
 });
 

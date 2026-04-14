@@ -37,6 +37,8 @@ export interface RoleSearchRequest {
   isAsc?: boolean;
   name?: string;
   code?: string;
+  createBy?: string;
+  updateBy?: string;
 }
 
 export interface RoleSearchResponse {
@@ -138,7 +140,9 @@ export async function searchRoleApi(params: RoleSearchRequest = {}): Promise<Rol
     orderStr: params.orderStr?.trim() || undefined,
     isAsc: params.isAsc,
     name: params.name?.trim() || undefined,
-    code: params.code?.trim() || undefined
+    code: params.code?.trim() || undefined,
+    createBy: params.createBy?.trim() || undefined,
+    updateBy: params.updateBy?.trim() || undefined
   });
 
   const response = await requestJson<{ items?: unknown[]; total?: unknown }>(`${ROLE_BASE_PATH}${query}`, {
