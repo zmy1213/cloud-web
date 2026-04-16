@@ -81,6 +81,16 @@ const router = createRouter({
       component: () => import("../views/index/index.vue")
     },
     {
+      path: "/workspace/application",
+      name: "WorkspaceApplication",
+      component: () => import("../views/index/index.vue")
+    },
+    {
+      path: "/workspace/application/create",
+      name: "AppCreateManager",
+      component: () => import("../views/index/index.vue")
+    },
+    {
       path: "/:pathMatch(.*)*",
       redirect: HOME_PATH
     }
@@ -131,3 +141,4 @@ router.beforeEach(async (to) => {
 });
 
 export default router;
+export { router };
