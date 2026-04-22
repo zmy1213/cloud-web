@@ -129,7 +129,8 @@
         <ApiManagementPage v-else-if="showApiManagementPage" />
         <PermissionManagementPage v-else-if="showRolePermissionPage" />
         <MenuManagementPage v-else-if="showMenuManagementPage" />
-        
+        <ApplicationManagementPage v-else-if="showApplicationPage" />
+
         <template v-else>
           <section class="hero-center-stage">
             <div class="hero-avatar">管</div>
@@ -200,6 +201,8 @@ import RoleManagementPage from "../../system/role/index.vue";
 import PermissionManagementPage from "../../system/permission/index.vue";
 import MenuManagementPage from "../../system/menu/index.vue";
 import ApiManagementPage from "../../system/api/index.vue";
+import ApplicationManagementPage from "../../workspace/application/index.vue";
+import ApplicationCreateManager from "../../workspace/application/ApplicationCreateManager.vue";
 import { getDashboardOverviewApi } from "../../../api/portal/dashboard";
 import { getClusterDetailApi, searchClusterApi } from "../../../api/manager/cluster";
 import { HOME_PATH } from "../../../router/paths";
@@ -233,6 +236,7 @@ const MENU_PERMISSION_MAP: Record<string, MenuPermissionRequirement> = {
   "项目中心::项目管理": { paths: ["/project/management"] },
   "项目中心::资源池": { paths: ["/project/resource"] },
   "项目中心::工作空间": { paths: ["/project/workspace"] },
+  "业务中心::应用中心": { paths: ["/workspace/application"] },
   "系统管理::用户管理": { paths: ["/system/user"] },
   "系统管理::角色管理": { paths: ["/system/role"] },
   "系统管理::权限管理": { paths: ["/system/api", "/system/permission"] },
@@ -417,6 +421,10 @@ const showRolePermissionPage = computed(
 const showMenuManagementPage = computed(
   () => activeMenu.value === "系统管理" && activeSubMenu.value === "菜单管理"
 );
+const showApplicationCreatePage = computed(() => route.path === "/workspace/application/create");
+const showApplicationPage = computed(
+  () => activeMenu.value === "业务中心" && activeSubMenu.value === "应用中心" && route.path === "/workspace/application"
+);
 
 const activeTab = computed({
   get() { return activeSubMenu.value; },
@@ -502,6 +510,16 @@ function navigateByMenu(menuLabel: string, subMenuLabel: string): void {
     }
     return;
   }
+  if (menuLabel === "业务中心" && subMenuLabel === "应用中心") {
+    if (route.path === "/workspace/application/create") {
+      void router.push("/workspace/application");
+      return;
+    }
+    if (route.path !== "/workspace/application") {
+      void router.push("/workspace/application");
+    }
+    return;
+  }
 
   if (
     route.path === "/project/management" ||
@@ -511,7 +529,9 @@ function navigateByMenu(menuLabel: string, subMenuLabel: string): void {
     route.path === "/system/role" ||
     route.path === "/system/api" ||
     route.path === "/system/permission" ||
-    route.path === "/system/menu"
+    route.path === "/system/menu" ||
+    route.path === "/workspace/application" ||
+    route.path === "/workspace/application/create"
   ) {
     void router.push(HOME_PATH);
   }
@@ -526,13 +546,21 @@ function syncMenuByRoute(path: string): void {
     path !== "/system/role" &&
     path !== "/system/api" &&
     path !== "/system/permission" &&
-    path !== "/system/menu"
+    path !== "/system/menu" &&
+    path !== "/workspace/application" &&
+    path !== "/workspace/application/create"
   ) {
     return;
   }
   inClusterManagement.value = false;
   inClusterAdding.value = false;
   consoleClusterId.value = null;
+  if (path === "/workspace/application" || path === "/workspace/application/create") {
+    activeMenu.value = "业务中心";
+    activeSubMenu.value = "应用中心";
+    expandedMenus.value = { "业务中心": true };
+    return;
+  }
   if (path.startsWith("/system/")) {
     activeMenu.value = "系统管理";
     if (path === "/system/role") {

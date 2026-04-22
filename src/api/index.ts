@@ -1,7 +1,9 @@
 export * as managerApi from "./manager";
 export * as portalApi from "./portal";
 export * as consoleApi from "./console";
+export * as workloadApi from "./workload";
 
 export * from "./manager";
 export * from "./portal";
 export * from "./console";
+export * from "./workload";
