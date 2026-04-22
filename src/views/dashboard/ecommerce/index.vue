@@ -122,6 +122,8 @@
         <ProjectManagementPage v-else-if="showProjectManagementPage" />
         <ProjectResourcePage v-else-if="showProjectResourcePage" />
         <ProjectWorkspacePage v-else-if="showProjectWorkspacePage" />
+        <EnergyAnomalyPage v-else-if="showEnergyOverviewPage" mode="overview" />
+        <EnergyAnomalyPage v-else-if="showEnergyAnomalyPage" mode="anomaly" />
         <UserManagementPage v-else-if="showUserManagementPage" />
         <RoleManagementPage v-else-if="showRoleManagementPage" />
         <ApiManagementPage v-else-if="showApiManagementPage" />
@@ -192,6 +194,7 @@ import DeviceCenterPage from "../../device/center/index.vue";
 import ProjectManagementPage from "../../project/management/index.vue";
 import ProjectResourcePage from "../../project/resource/index.vue";
 import ProjectWorkspacePage from "../../project/workspace/index.vue";
+import EnergyAnomalyPage from "../../ops/energy-anomaly/index.vue";
 import UserManagementPage from "../../system/user/index.vue";
 import RoleManagementPage from "../../system/role/index.vue";
 import PermissionManagementPage from "../../system/permission/index.vue";
@@ -389,6 +392,12 @@ const showProjectResourcePage = computed(
 );
 const showProjectWorkspacePage = computed(
   () => activeMenu.value === "项目中心" && activeSubMenu.value === "工作空间"
+);
+const showEnergyOverviewPage = computed(
+  () => activeMenu.value === "异常检测" && activeSubMenu.value === "算电概览"
+);
+const showEnergyAnomalyPage = computed(
+  () => activeMenu.value === "异常检测" && activeSubMenu.value === "算力异常检测"
 );
 const showUserManagementPage = computed(
   () => activeMenu.value === "系统管理" && activeSubMenu.value === "用户管理"
