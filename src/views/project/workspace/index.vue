@@ -134,7 +134,7 @@ import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import {
   addProjectWorkspaceApi,
   deleteProjectWorkspaceApi,
-  searchProjectApi,
+  getProjectsByUserApi,
   searchProjectClusterApi,
   searchProjectWorkspaceApi,
   syncWorkspaceApi,
@@ -193,8 +193,7 @@ function showSuccess(message: string): void {
 }
 
 async function loadProjects() {
-  const resp = await searchProjectApi({ page: 1, pageSize: 200 });
-  projects.value = resp.items ?? [];
+  projects.value = await getProjectsByUserApi();
   if (selectedProjectId.value <= 0 && projects.value.length > 0) {
     selectedProjectId.value = projects.value[0]?.id ?? 0;
   }

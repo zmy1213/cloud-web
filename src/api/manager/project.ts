@@ -609,17 +609,21 @@ export async function addProjectWorkspaceApi(data: AddProjectWorkspaceRequest): 
 }
 
 export async function updateProjectWorkspaceApi(id: number, data: UpdateProjectWorkspaceRequest): Promise<string> {
+  // 先拉取完整工作空间：PUT 会携带全部配额字段；若只提交表单里的几项，go-zero 解析通过后 RPC 会把未传字段当成 0，导致集群配额被误减。
+  const existing = await requestJson<Record<string, unknown>>(`${PROJECT_BASE_PATH}/workspace/${id}`, {
+    method: "GET"
+  });
+  const merged: Record<string, unknown> = { ...existing };
+  merged.name = data.name;
+  merged.description = data.description ?? "";
+  merged.cpuAllocated = toQuantity(data.cpuAllocated) ?? merged.cpuAllocated;
+  merged.memAllocated = toQuantity(data.memAllocated) ?? merged.memAllocated;
+  merged.storageAllocated = toQuantity(data.storageAllocated) ?? merged.storageAllocated;
+  merged.gpuAllocated = toQuantity(data.gpuAllocated) ?? merged.gpuAllocated;
+  merged.podsAllocated = data.podsAllocated;
   return requestJson<string>(`${PROJECT_BASE_PATH}/workspace/${id}`, {
     method: "PUT",
-    body: JSON.stringify({
-      name: data.name,
-      description: data.description,
-      cpuAllocated: toQuantity(data.cpuAllocated),
-      memAllocated: toQuantity(data.memAllocated),
-      storageAllocated: toQuantity(data.storageAllocated),
-      gpuAllocated: toQuantity(data.gpuAllocated),
-      podsAllocated: data.podsAllocated
-    })
+    body: JSON.stringify(merged)
   });
 }
 
